@@ -31,7 +31,7 @@ Matematiksel fonksiyonları doğal notasyonla yazıp görselleştiren, türev ve
 │  [+ Fonksiyon Ekle]         │  │                                       │
 │                             │  │   f(x) ↑                              │
 │  Önizleme:                  │  │        │   ╭───╮                      │
-│  f(x) = sin(x)              │  │  ──────┼──╯   ╰──── x                │
+│  f(x) = sin(x)              │  │  ──────┼──╯   ╰──── x                 │
 │                             │  │        │                              │
 │  Min: -10  Max: 10          │  │                                       │
 │  Adım: 0.0100               │  │                                       │
