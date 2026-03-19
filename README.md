@@ -15,13 +15,13 @@ Matematiksel fonksiyonları doğal notasyonla yazıp görselleştiren, türev ve
 
 ---
 
-## Ekran Görüntüsü
+## Ekran Dizaynı
 
 ```
 ┌─ Fonksiyonlar ──────────────┐  ┌─ Grafik ──────────────────────────────┐
-│  ● f1(x) = sin(x)      [×] │  │                                       │
-│  ● f2(x) = x^2/4       [×] │  │         Fonksiyon Grafiği             │
-│  [+ Fonksiyon Ekle]        │  │                                       │
+│  ● f1(x) = sin(x)      [×]  │  │                                       │
+│  ● f2(x) = x^2/4       [×]  │  │         Fonksiyon Grafiği             │
+│  [+ Fonksiyon Ekle]         │  │                                       │
 │                             │  │   f(x) ↑                              │
 │  Önizleme:                  │  │        │   ╭───╮                      │
 │  f(x) = sin(x)              │  │  ──────┼──╯   ╰──── x                │
@@ -31,7 +31,7 @@ Matematiksel fonksiyonları doğal notasyonla yazıp görselleştiren, türev ve
 │  [🔍 Çiz] [✕ Temizle]      │  └───────────────────────────────────────┘
 │  ─────────────────────────  │
 │  a: [-1] b: [1]             │
-│  [İntegral Al] [Türev Al] ✕ │
+│  [İntegral Al] [Türev Al] x │
 │  Sonuçlar:                  │
 │  f1'(x) = cos(x)            │
 └─────────────────────────────┘
