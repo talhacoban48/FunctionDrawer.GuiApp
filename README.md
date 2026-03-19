@@ -4,6 +4,13 @@ Matematiksel fonksiyonları doğal notasyonla yazıp görselleştiren, türev ve
 
 ---
 
+## İndir
+
+**[FunctionDrawer_Setup_1.0.0.exe](https://github.com/talhacoban48/FunctionDrawer.GuiApp/releases/download/v1.0.0/FunctionDrawer_Setup_v1.0.0.exe)**
+
+
+---
+
 ## Özellikler
 
 - **Doğal matematik notasyonu** — `2sin(4x)`, `x^2`, `sqrt(x)` gibi ifadeleri doğrudan yazın
