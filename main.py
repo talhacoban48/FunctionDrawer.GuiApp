@@ -7,8 +7,9 @@ from matplotlib.figure import Figure
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QGroupBox, QLabel, QLineEdit, QPushButton, QDoubleSpinBox,
-    QFormLayout, QSizePolicy, QMessageBox
+    QFormLayout, QSizePolicy, QMessageBox, QScrollArea, QFrame
 )
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QFont
 from sympy import symbols, latex, lambdify
 from sympy.parsing.sympy_parser import (
@@ -23,14 +24,64 @@ TRANSFORMATIONS = standard_transformations + (
 )
 X = symbols('x')
 
+COLORS = [
+    'steelblue', 'darkorange', 'seagreen', '#cc3333',
+    '#9b59b6', '#e67e22', '#1abc9c', '#e91e63',
+]
+
 
 def parse_formula(text: str):
-    """Doğal matematik notasyonunu sympy ifadesine çevirir."""
     return parse_expr(text, transformations=TRANSFORMATIONS, local_dict={'x': X})
 
 
 # ---------------------------------------------------------------------------
-# LaTeX önizleme için küçük matplotlib canvas
+# Tek bir formül satırı
+# ---------------------------------------------------------------------------
+class FormulaRow(QWidget):
+    text_changed = pyqtSignal(object, str)   # (self, text)
+    remove_requested = pyqtSignal(object)    # (self)
+
+    def __init__(self, color: str, index: int, parent=None):
+        super().__init__(parent)
+        self.color = color
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        # Renk göstergesi
+        dot = QFrame()
+        dot.setFixedSize(14, 14)
+        dot.setStyleSheet(
+            f'background-color: {color}; border-radius: 7px;'
+        )
+        row.addWidget(dot)
+
+        # Formül girişi
+        self.input = QLineEdit()
+        self.input.setPlaceholderText(f'f{index}(x) =')
+        self.input.setFont(QFont('Courier New', 11))
+        self.input.setMinimumHeight(32)
+        row.addWidget(self.input, stretch=1)
+
+        # Sil butonu
+        remove_btn = QPushButton('×')
+        remove_btn.setFixedSize(28, 28)
+        remove_btn.setStyleSheet('color: #cc3333; font-size: 16px; border: none;')
+        remove_btn.clicked.connect(lambda: self.remove_requested.emit(self))
+        row.addWidget(remove_btn)
+
+        self.input.textChanged.connect(lambda t: self.text_changed.emit(self, t))
+
+    def text(self) -> str:
+        return self.input.text().strip()
+
+    def set_index(self, index: int):
+        self.input.setPlaceholderText(f'f{index}(x) =')
+
+
+# ---------------------------------------------------------------------------
+# LaTeX önizleme
 # ---------------------------------------------------------------------------
 class PreviewCanvas(FigureCanvas):
     def __init__(self, parent=None):
@@ -41,16 +92,15 @@ class PreviewCanvas(FigureCanvas):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ax = self.fig.add_axes([0, 0, 1, 1])
         self.ax.axis('off')
-        self.fig.tight_layout(pad=0)
 
-    def show_latex(self, latex_str: str):
+    def show_latex(self, latex_str: str, color: str = '#222222'):
         self.ax.clear()
         self.ax.axis('off')
         self.ax.text(
             0.5, 0.5,
             f'$f(x) = {latex_str}$',
             fontsize=13, ha='center', va='center',
-            transform=self.ax.transAxes, color='#222222'
+            transform=self.ax.transAxes, color=color
         )
         self.draw()
 
@@ -82,7 +132,6 @@ class PlotCanvas(FigureCanvas):
         self.ax = self.fig.add_subplot(111)
         self._draw_empty()
 
-    # --- iç yardımcılar ---
     def _style_axes(self):
         self.ax.axhline(y=0, color='#cc2222', linewidth=0.8)
         self.ax.axvline(x=0, color='#cc2222', linewidth=0.8)
@@ -97,29 +146,29 @@ class PlotCanvas(FigureCanvas):
         self.fig.tight_layout()
         self.draw()
 
-    # --- dışa açık API ---
-    def plot(self, func, x_min: float, x_max: float, step: float, title_latex: str = ''):
+    def plot_all(self, functions: list, x_min: float, x_max: float, step: float):
+        """functions: list of (callable, latex_str, color)"""
         x_inputs = np.arange(x_min, x_max + step, step)
-        xs, ys = [], []
-        for x in x_inputs:
-            try:
-                xr = float(np.round(x, 6))
-                yr = float(func(xr))
-                if np.isfinite(yr):
-                    xs.append(xr)
-                    ys.append(yr)
-            except Exception:
-                pass
-
         self.ax.clear()
-        self.ax.plot(xs, ys, linestyle='-', linewidth=1.5, color='steelblue')
+
+        for func, latex_str, color in functions:
+            xs, ys = [], []
+            for x in x_inputs:
+                try:
+                    xr = float(np.round(x, 6))
+                    yr = float(func(xr))
+                    if np.isfinite(yr):
+                        xs.append(xr)
+                        ys.append(yr)
+                except Exception:
+                    pass
+            self.ax.plot(xs, ys, linestyle='-', linewidth=1.5,
+                         color=color, label=f'$f(x)={latex_str}$')
+
         self._style_axes()
-
-        if title_latex:
-            self.ax.set_title(f'$f(x) = {title_latex}$', fontsize=13, fontweight='bold')
-        else:
-            self.ax.set_title('Fonksiyon Grafiği', fontsize=14, fontweight='bold')
-
+        if functions:
+            self.ax.legend(fontsize=10, loc='best')
+        self.ax.set_title('Fonksiyon Grafiği', fontsize=14, fontweight='bold')
         self.fig.tight_layout()
         self.draw()
 
@@ -134,36 +183,50 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Function Drawer')
-        self.setMinimumSize(920, 580)
+        self.setMinimumSize(960, 580)
+        self._rows: list[FormulaRow] = []
         self._build_ui()
-        self._connect_signals()
+        self._add_row()   # Başlangıçta bir satır
 
-    # --- UI oluşturma ---
     def _build_ui(self):
         root = QWidget()
         self.setCentralWidget(root)
         layout = QHBoxLayout(root)
         layout.setSpacing(12)
         layout.setContentsMargins(12, 12, 12, 12)
-
         layout.addWidget(self._left_panel())
         layout.addWidget(self._right_panel(), stretch=1)
 
+    # --- sol panel ---
     def _left_panel(self) -> QGroupBox:
-        group = QGroupBox('Fonksiyon')
-        group.setFixedWidth(300)
+        group = QGroupBox('Fonksiyonlar')
+        group.setFixedWidth(360)
         vbox = QVBoxLayout(group)
         vbox.setSpacing(10)
 
-        # Formül girişi
-        vbox.addWidget(QLabel('f(x) ='))
-        self.formula_input = QLineEdit()
-        self.formula_input.setPlaceholderText('örn:  sin(4x) - 2sin(2x) / x^3')
-        self.formula_input.setFont(QFont('Courier New', 12))
-        self.formula_input.setMinimumHeight(36)
-        vbox.addWidget(self.formula_input)
+        # Kaydırılabilir formül listesi
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            scroll.horizontalScrollBarPolicy() if False else 0x1  # off
+        )
 
-        # LaTeX önizleme
+        self._rows_widget = QWidget()
+        self._rows_layout = QVBoxLayout(self._rows_widget)
+        self._rows_layout.setSpacing(6)
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.addStretch()
+        scroll.setWidget(self._rows_widget)
+        scroll.setMinimumHeight(140)
+        vbox.addWidget(scroll)
+
+        # Fonksiyon ekle butonu
+        add_btn = QPushButton('+ Fonksiyon Ekle')
+        add_btn.clicked.connect(self._add_row)
+        vbox.addWidget(add_btn)
+
+        # Önizleme
         vbox.addWidget(QLabel('Önizleme:'))
         self.preview = PreviewCanvas(self)
         vbox.addWidget(self.preview)
@@ -172,11 +235,9 @@ class MainWindow(QMainWindow):
         form_widget = QWidget()
         form = QFormLayout(form_widget)
         form.setSpacing(8)
-
         self.min_spin = self._make_spin(-10, -1000, 1000, step=1.0)
         self.max_spin = self._make_spin(10, -1000, 1000, step=1.0)
         self.step_spin = self._make_spin(0.01, 0.0001, 10.0, step=0.01, decimals=4)
-
         form.addRow('Min:', self.min_spin)
         form.addRow('Max:', self.max_spin)
         form.addRow('Adım:', self.step_spin)
@@ -189,11 +250,12 @@ class MainWindow(QMainWindow):
         self.draw_btn.setDefault(True)
         self.clear_btn = QPushButton('Temizle')
         self.clear_btn.setMinimumHeight(36)
+        self.draw_btn.clicked.connect(self._on_draw)
+        self.clear_btn.clicked.connect(self._on_clear)
         btn_row.addWidget(self.draw_btn)
         btn_row.addWidget(self.clear_btn)
         vbox.addLayout(btn_row)
 
-        vbox.addStretch()
         return group
 
     def _right_panel(self) -> QGroupBox:
@@ -213,49 +275,72 @@ class MainWindow(QMainWindow):
         sb.setDecimals(decimals)
         return sb
 
-    # --- sinyal bağlantıları ---
-    def _connect_signals(self):
-        self.formula_input.textChanged.connect(self._on_text_changed)
-        self.draw_btn.clicked.connect(self._on_draw)
-        self.clear_btn.clicked.connect(self._on_clear)
+    # --- satır yönetimi ---
+    def _add_row(self):
+        index = len(self._rows) + 1
+        color = COLORS[(index - 1) % len(COLORS)]
+        row = FormulaRow(color=color, index=index, parent=self)
+        row.text_changed.connect(self._on_row_text_changed)
+        row.remove_requested.connect(self._remove_row)
+        self._rows.append(row)
+        # stretch'ten önce ekle
+        self._rows_layout.insertWidget(self._rows_layout.count() - 1, row)
+
+    def _remove_row(self, row: FormulaRow):
+        if len(self._rows) == 1:
+            row.input.clear()
+            return
+        self._rows.remove(row)
+        row.setParent(None)
+        row.deleteLater()
+        for i, r in enumerate(self._rows):
+            r.set_index(i + 1)
 
     # --- slot'lar ---
-    def _on_text_changed(self, text: str):
+    def _on_row_text_changed(self, row: FormulaRow, text: str):
         if not text.strip():
             self.preview.clear()
             return
         try:
             expr = parse_formula(text)
-            self.preview.show_latex(latex(expr))
+            self.preview.show_latex(latex(expr), color=row.color)
         except Exception:
             self.preview.show_error()
 
     def _on_draw(self):
-        text = self.formula_input.text().strip()
-        if not text:
-            QMessageBox.warning(self, 'Uyarı', 'Lütfen bir fonksiyon girin.')
-            return
-
         x_min = self.min_spin.value()
         x_max = self.max_spin.value()
         if x_min >= x_max:
             QMessageBox.warning(self, 'Uyarı', 'Min değeri Max değerinden küçük olmalıdır.')
             return
 
-        try:
-            expr = parse_formula(text)
-            func = lambdify(X, expr, modules=['numpy'])
-            self.plot_canvas.plot(
-                func, x_min, x_max,
-                self.step_spin.value(),
-                title_latex=latex(expr)
-            )
-        except Exception as e:
-            QMessageBox.critical(self, 'Hata', f'Fonksiyon çizilemedi:\n{e}')
+        functions = []
+        errors = []
+        for row in self._rows:
+            text = row.text()
+            if not text:
+                continue
+            try:
+                expr = parse_formula(text)
+                func = lambdify(X, expr, modules=['numpy'])
+                functions.append((func, latex(expr), row.color))
+            except Exception as e:
+                errors.append(f'  "{text}" → {e}')
+
+        if errors:
+            QMessageBox.critical(self, 'Hata', 'Bazı fonksiyonlar çizilemedi:\n' + '\n'.join(errors))
+
+        if not functions:
+            QMessageBox.warning(self, 'Uyarı', 'Çizilecek geçerli bir fonksiyon girilmedi.')
+            return
+
+        self.plot_canvas.plot_all(functions, x_min, x_max, self.step_spin.value())
 
     def _on_clear(self):
-        self.formula_input.clear()
+        for row in self._rows:
+            row.input.clear()
         self.plot_canvas.clear()
+        self.preview.clear()
 
 
 # ---------------------------------------------------------------------------
